@@ -2,13 +2,15 @@ import androidx.compose.ui.geometry.Offset
 import java.awt.Dimension
 import kotlin.math.absoluteValue
 
-interface NodeType {
-    val id: Int
-    val name: String
-    val contentList: List<Any?>
-    val inputNodeList: List<Int>
-    val outputNode: Int
-    val output: Any?
+abstract class NodeType {
+    abstract val id: Int
+    abstract val name: String
+    abstract val contentList: List<Any?>
+    abstract val inputNodeList: List<Int>
+    abstract val outputNode: Int
+    abstract val output: Any?
+    open val isInList: Boolean = true
+    open val canOpenImages: Boolean = false
 }
 
 class NodeObject(
