@@ -1,9 +1,13 @@
+import androidx.compose.ui.geometry.Offset
 import java.awt.Dimension
+import kotlin.math.absoluteValue
 
 interface NodeType {
+    val id: Int
     val name: String
     val contentList: List<Any?>
-    val inputList: List<NodeType>
+    val inputNodeList: List<Int>
+    val outputNode: Int
     val output: Any?
 }
 
@@ -16,6 +20,56 @@ class NodeObject(
     constructor(nodeType: NodeType, layoutSize: Dimension) : this(nodeType, layoutSize.width / 2, layoutSize.height / 2)
 
     var content: MutableList<Any?> = nodeType.contentList.toMutableList()
-    var input: MutableList<Any?> = nodeType.inputList.toMutableList()
+    var input: MutableList<Any?> = nodeType.inputNodeList.toMutableList()
     var output: Any? = nodeType.output
+    var outputConnector: NodeConnector =
+        NodeConnector(Offset(0f, 0f), null, false, NodeTypeStore.getNode(nodeType.outputNode))
+    var inputConnectors: List<NodeConnector>
+
+    init {
+        val inputConnectorsList = mutableListOf<NodeConnector>()
+        for (i in input.indices) {
+            inputConnectorsList.add(
+                NodeConnector(
+                    Offset(0f, 0f),
+                    null,
+                    true,
+                    NodeTypeStore.getNode(nodeType.inputNodeList[i])
+                )
+            )
+        }
+        inputConnectors = inputConnectorsList
+    }
+
+}
+
+data class NodeConnection(
+    var startNodeObject: NodeObject,
+    var endNodeObject: NodeObject?,
+    var startConnector: NodeConnector,
+    var endConnector: NodeConnector
+)
+
+data class NodeConnector(
+    var offset: Offset,
+    var nodeConnection: NodeConnection?,
+    val isInput: Boolean,
+    val transferNodeType: NodeType
+)
+
+fun NodeConnector.Remove() {
+    if (nodeConnection != null) {
+        if (nodeConnection!!.endConnector == this) {
+            nodeConnection!!.startConnector.nodeConnection = null
+            nodeConnection!!.endConnector.nodeConnection = null
+        }else{
+            nodeConnection!!.endConnector.nodeConnection = null
+            nodeConnection!!.startConnector.nodeConnection = null
+        }
+    }
+}
+
+fun Offset.isInBounds(nodeConnector: NodeConnector): Boolean {
+    val res = (nodeConnector.offset.getDistanceSquared() - this.getDistanceSquared()).absoluteValue
+    return res < 5000
 }
