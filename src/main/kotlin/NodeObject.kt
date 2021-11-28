@@ -8,9 +8,9 @@ abstract class NodeType {
     abstract val contentList: List<Any?>
     abstract val inputNodeList: List<Int>
     abstract val outputNode: Int
-    abstract val output: Any?
+    abstract val outputFun: (contentList: List<Any?>, inputList: List<Any?>) -> Any?
     open val isInList: Boolean = true
-    open val canOpenImages: Boolean = false
+    open val canOpenImages: Boolean? = null
 }
 
 class NodeObject(
@@ -22,11 +22,12 @@ class NodeObject(
     constructor(nodeType: NodeType, layoutSize: Dimension) : this(nodeType, layoutSize.width / 2, layoutSize.height / 2)
 
     var content: MutableList<Any?> = nodeType.contentList.toMutableList()
-    var input: MutableList<Any?> = nodeType.inputNodeList.toMutableList()
-    var output: Any? = nodeType.output
+    var input: MutableList<Int> = nodeType.inputNodeList.toMutableList()
+    var output: Any? = null
     var outputConnector: NodeConnector =
         NodeConnector(Offset(0f, 0f), null, false, NodeTypeStore.getNode(nodeType.outputNode))
     var inputConnectors: List<NodeConnector>
+    var isError = false //TODO
 
     init {
         val inputConnectorsList = mutableListOf<NodeConnector>()
@@ -41,6 +42,29 @@ class NodeObject(
             )
         }
         inputConnectors = inputConnectorsList
+        invalidateInput()
+    }
+
+    fun invalidateInput(forceTraverse: Boolean = false) {
+        try {
+            val pastOutput = output
+            output = nodeType.outputFun(content, getInputList())
+            if (pastOutput != output || forceTraverse)
+                outputConnector.nodeConnection?.endNodeObject?.invalidateInput()
+            isError = false
+        } catch (e: Exception) {
+            output = null
+            isError = true
+        }
+    }
+
+    fun getInputList(): List<Any?> {
+        val r = mutableListOf<Any?>()
+        inputConnectors.forEach {
+            val curOutput = it.nodeConnection?.startNodeObject?.output
+            if (curOutput != null) r.add(curOutput)
+        }
+        return r
     }
 
 }
@@ -64,8 +88,9 @@ fun NodeConnector.Remove() {
         if (nodeConnection!!.endConnector == this) {
             nodeConnection!!.startConnector.nodeConnection = null
             nodeConnection!!.endConnector.nodeConnection = null
-        }else{
+        } else {
             nodeConnection!!.endConnector.nodeConnection = null
+            nodeConnection!!.endNodeObject?.invalidateInput(false)
             nodeConnection!!.startConnector.nodeConnection = null
         }
     }

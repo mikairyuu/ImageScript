@@ -2,6 +2,7 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.AwtWindow
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.singleWindowApplication
+import kotlinx.coroutines.*
 import java.awt.Dimension
 import java.awt.FileDialog
 import java.io.File
@@ -80,6 +82,7 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
             )
         )
     val redrawTrigger = remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
     Canvas(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -93,7 +96,7 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
     Row {
         NodeViewLayout(frameWindowScope.window.size, modifier = Modifier.weight(0.9f, true)) {
             nodeContainer.forEach {
-                Node(nodeContainer, it, redrawTrigger, frameWindowScope)
+                Node(nodeContainer, it, redrawTrigger, frameWindowScope, coroutineScope)
             }
         }
         Box(modifier = Modifier.width(5.dp).fillMaxHeight().background(Color.Black))
@@ -141,7 +144,8 @@ fun Node(
     nodeContainer: SnapshotStateList<NodeObject>,
     node: NodeObject,
     redrawTrigger: MutableState<Boolean>,
-    windowScope: FrameWindowScope
+    windowScope: FrameWindowScope,
+    coroutineScope: CoroutineScope,
 ) {
     var internalNode by remember { mutableStateOf(node) } // нода этого элемента стэка вызовов компоуза
     var x by remember { mutableStateOf(node.Xpos) }
@@ -158,21 +162,22 @@ fun Node(
         verticalAlignment = Alignment.CenterVertically
     ) { //Row из трёх колонок - входящих связей, ноды, и исходящих связей
         connectorRedrawTrigger.let {
-            Column(modifier = Modifier.offset(-10.dp, 0.dp)) {
+            Column(modifier = Modifier.offset((-10).dp, 0.dp)) {
                 for (i in node.inputConnectors.indices) {
-                    NodeConnection(
+                    NodeConnector(
                         node.inputConnectors[i],
                         node,
                         nodeContainer,
                         redrawTrigger,
-                        NodeTypeStore.getNode(node.nodeType.inputNodeList[i])
+                        NodeTypeStore.getNode(node.nodeType.inputNodeList[i]),
+                        coroutineScope
                     )
                 }
             }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.wrapContentWidth(Alignment.Start).width(125.dp).background(Color.White)
-                .border(2.dp, Color.Black)
+                .border(2.dp, if (node.isError) Color.Red else Color.Black)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consumeAllChanges()
@@ -201,14 +206,15 @@ fun Node(
             }
         }
         connectorRedrawTrigger.let {
-            if (node.nodeType.output != null) {
+            if (node.nodeType.id != 6) {
                 Column(modifier = Modifier.offset(10.dp, 0.dp)) {
-                    NodeConnection(
+                    NodeConnector(
                         node.outputConnector,
                         node,
                         nodeContainer,
                         redrawTrigger,
-                        NodeTypeStore.getNode(node.nodeType.outputNode)
+                        NodeTypeStore.getNode(node.nodeType.outputNode),
+                        coroutineScope
                     )
                 }
             }
@@ -226,12 +232,13 @@ fun Node(
 }
 
 @Composable
-fun NodeConnection(
+fun NodeConnector(
     nodeConnector: NodeConnector,
     node: NodeObject,
     nodeContainer: SnapshotStateList<NodeObject>,
     canvasRedrawTrigger: MutableState<Boolean>,
-    transferNodeType: NodeType
+    transferNodeType: NodeType,
+    coroutineScope: CoroutineScope
 ) {
     var connectionRedrawTrigger by remember { mutableStateOf(false) }
     connectionRedrawTrigger.let {
@@ -254,6 +261,7 @@ fun NodeConnection(
                         connectionRedrawTrigger = !connectionRedrawTrigger
                     }, onDrag = { change, amount ->
                         if (unconnectedConnection != null) {
+                            var connected = false
                             unconnectedConnection!!.endConnector.offset =
                                 unconnectedConnection!!.endConnector.offset.plus(change.positionChange())
                             if (nodeConnector.isInput) {
@@ -266,6 +274,7 @@ fun NodeConnection(
                                         unconnectedConnection!!.endNodeObject = node
                                         curNode.outputConnector.nodeConnection = unconnectedConnection
                                         unconnectedConnection = null
+                                        connected = true
                                         break
                                     }
                                 }
@@ -277,11 +286,18 @@ fun NodeConnection(
                                         if (unconnectedConnection!!.endConnector.offset.isInBounds(con)) {
                                             if (con.nodeConnection != null) con.Remove()
                                             unconnectedConnection!!.endConnector = con
+                                            unconnectedConnection!!.endNodeObject = curNode
                                             con.nodeConnection = unconnectedConnection
                                             unconnectedConnection = null
+                                            connected = true
                                             break
                                         }
                                     }
+                                }
+                            }
+                            if (connected) {
+                                coroutineScope.launch(Dispatchers.Default) {
+                                    node.invalidateInput(true)
                                 }
                             }
                         }
@@ -331,38 +347,50 @@ fun NodeFields(node: NodeObject, windowScope: FrameWindowScope, bigImageHandler:
                             return@OutlinedTextField
                         }
                     }
+                    if (it.text.isEmpty()) {
+                        node.content[i] = null
+                    }
                     text = it
                     node.content[i] = it.text
+                    node.invalidateInput()
                 },
                 label = { Text("Значение") })
         } else {
-            var windowOpened by remember { mutableStateOf(false) }
+            var windowOpened by remember { mutableStateOf<Boolean?>(null) }
             val hoverInteraction = remember { MutableInteractionSource() }
             val isHovered by hoverInteraction.collectIsHoveredAsState()
-            if (windowOpened) {
-                windowScope.FileDialog("Выберите файл для открытия", true) {
-                    windowOpened = false
+            if (windowOpened != null) {
+                windowScope.FileDialog(
+                    if (windowOpened!!) "Выберите файл для открытия" else "Выберите файл для сохранения",
+                    windowOpened!!
+                ) {
+                    windowOpened = null
                     if (it != null) {
                         try {
                             val img = ImageIO.read(it.toFile())
                             node.content[i] = img.toComposeImageBitmap()
-                            windowScope.window.title = it.fileName.toString()
+                            node.invalidateInput()
                         } catch (_: IOException) {
                         }
                     }
                 }
             }
-            if (isHovered) bigImageHandler.value = node.content[i] as ImageBitmap?
+            if (isHovered) bigImageHandler.value = node.output as ImageBitmap?
             else bigImageHandler.value = null
-            Image(
-                node.content[i] as ImageBitmap,
-                contentDescription = "Image viewer",
-                modifier = Modifier.size(100.dp).hoverable(
-                    hoverInteraction
+            if (node.output != null) {
+                Image(
+                    node.output as ImageBitmap,
+                    contentDescription = "Image viewer",
+                    modifier = Modifier.size(100.dp).hoverable(
+                        hoverInteraction
+                    )
                 )
-            )
-            if (node.nodeType.canOpenImages)
+            }
+            if (node.nodeType.canOpenImages == true) {
                 Button({ windowOpened = true }) { Text("Open") }
+            } else if (node.nodeType.canOpenImages == false) {
+                Button({ windowOpened = false }) { Text("Save") }
+            }
         }
     }
 }
