@@ -59,6 +59,7 @@ class NodeObject(
                     outputConnector.nodeConnection?.endNodeObject?.invalidateInput()
                 isError = false
             } catch (e: Exception) {
+                e.printStackTrace()
                 output = null
                 isError = true
             }

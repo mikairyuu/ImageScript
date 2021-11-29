@@ -395,9 +395,9 @@ fun NodeFields(
                 )
             }
             if (node.nodeType.miscAttribute == ImageView.Openable) {
-                Button({ windowOpened = true }) { Text("Open") }
+                Button({ windowOpened = true }) { Text("Открыть") }
             } else if (node.nodeType.miscAttribute == ImageView.Saveable) {
-                Button({ windowOpened = false }) { Text("Save") }
+                Button({ windowOpened = false }) { Text("Сохранить") }
             }
         }
     }

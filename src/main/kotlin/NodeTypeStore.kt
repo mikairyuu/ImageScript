@@ -3,10 +3,10 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.bytedeco.javacv.Java2DFrameUtils
 import org.bytedeco.javacv.OpenCVFrameConverter
-import org.opencv.core.Mat
 import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
+
 
 enum class ImageView {
     Viewable,
@@ -87,7 +87,8 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val src = conv.convertToOrgOpenCvCoreMat(conv.convert(Java2DFrameUtils.toMat((inputList[0] as ImageBitmap).toAwtImage())))
+                    val src =
+                        conv.convertToOrgOpenCvCoreMat(conv.convert(Java2DFrameUtils.toMat((inputList[0] as ImageBitmap).toAwtImage())))
                     Imgproc.putText(
                         src,
                         inputList[3] as String,
@@ -105,11 +106,20 @@ object NodeTypeStore {
             override val id: Int = 7
             override val name: String = "Добавить изображение"
             override val contentList: List<Any?> = listOf(null as ImageBitmap?)
-            override val inputNodeList: List<Int> = listOf(0, 0, 3)
-            override val inputNameList: List<String> = listOf("x", "y", "img")
+            override val inputNodeList: List<Int> = listOf(3, 0, 0, 3)
+            override val inputNameList: List<String> = listOf("img", "x", "y", "addImg")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val source = (inputList[0] as ImageBitmap).toAwtImage()
+                    source.graphics.drawImage(
+                        (inputList[3] as ImageBitmap).toAwtImage(),
+                        inputList[1] as Int,
+                        inputList[2] as Int,
+                        null
+                    )
+                    source.toComposeImageBitmap()
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
