@@ -18,7 +18,10 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
+    implementation("org.bytedeco:javacv-platform:1.5.6")
+    implementation("org.openpnp:opencv:4.5.1-2")
 }
+
 
 tasks.withType<KotlinCompile>() {
     kotlinOptions.jvmTarget = "16"

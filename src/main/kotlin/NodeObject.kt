@@ -1,4 +1,5 @@
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.*
 import java.awt.Dimension
 import kotlin.math.absoluteValue
 
@@ -7,10 +8,11 @@ abstract class NodeType {
     abstract val name: String
     abstract val contentList: List<Any?>
     abstract val inputNodeList: List<Int>
+    abstract val inputNameList: List<String>
     abstract val outputNode: Int
     abstract val outputFun: (contentList: List<Any?>, inputList: List<Any?>) -> Any?
     open val isInList: Boolean = true
-    open val canOpenImages: Boolean? = null
+    open val miscAttribute: Any? = null
 }
 
 class NodeObject(
@@ -27,7 +29,9 @@ class NodeObject(
     var outputConnector: NodeConnector =
         NodeConnector(Offset(0f, 0f), null, false, NodeTypeStore.getNode(nodeType.outputNode))
     var inputConnectors: List<NodeConnector>
-    var isError = false //TODO
+    var isError = false
+    private val coroutineScope = CoroutineScope(Dispatchers.Default)
+    private var job : Job? = null
 
     init {
         val inputConnectorsList = mutableListOf<NodeConnector>()
@@ -46,15 +50,18 @@ class NodeObject(
     }
 
     fun invalidateInput(forceTraverse: Boolean = false) {
-        try {
-            val pastOutput = output
-            output = nodeType.outputFun(content, getInputList())
-            if (pastOutput != output || forceTraverse)
-                outputConnector.nodeConnection?.endNodeObject?.invalidateInput()
-            isError = false
-        } catch (e: Exception) {
-            output = null
-            isError = true
+        job?.cancel()
+        job = coroutineScope.launch {
+            try {
+                val pastOutput = output
+                output = nodeType.outputFun(content, getInputList())
+                if (pastOutput != output || forceTraverse)
+                    outputConnector.nodeConnection?.endNodeObject?.invalidateInput()
+                isError = false
+            } catch (e: Exception) {
+                output = null
+                isError = true
+            }
         }
     }
 
@@ -65,6 +72,10 @@ class NodeObject(
             if (curOutput != null) r.add(curOutput)
         }
         return r
+    }
+
+    fun destroy() {
+        coroutineScope.cancel()
     }
 
 }

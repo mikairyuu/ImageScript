@@ -2,7 +2,6 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
@@ -19,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.pointerInput
@@ -34,7 +34,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.AwtWindow
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.singleWindowApplication
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.awt.Dimension
 import java.awt.FileDialog
 import java.io.File
@@ -73,14 +75,15 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
     val nodeContainer =
         mutableStateListOf<NodeObject>(
             NodeObject(
-                NodeTypeStore.getNode(5),
+                NodeTypeStore.getNode(4),
                 frameWindowScope.window.size.width / 7,
                 frameWindowScope.window.size.height / 2
             ), NodeObject(
-                NodeTypeStore.getNode(6), frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 7),
+                NodeTypeStore.getNode(5), frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 7),
                 frameWindowScope.window.size.height / 2
             )
         )
+    //val connectionContainer = mutableListOf<Conne>()
     val redrawTrigger = remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     Canvas(
@@ -170,7 +173,7 @@ fun Node(
                         nodeContainer,
                         redrawTrigger,
                         NodeTypeStore.getNode(node.nodeType.inputNodeList[i]),
-                        coroutineScope
+                        node.nodeType.inputNameList[i]
                     )
                 }
             }
@@ -181,7 +184,6 @@ fun Node(
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consumeAllChanges()
-                        //  if(offsetX+dragAmount.x > ) TODO
                         x += dragAmount.x.toInt()
                         y += dragAmount.y.toInt()
                         node.Xpos = x
@@ -192,12 +194,12 @@ fun Node(
         ) {
             Text(node.nodeType.name, textAlign = TextAlign.Center)
             Box(modifier = Modifier.height(2.dp).fillMaxWidth().background(Color.Black))
-            NodeFields(node, windowScope, bigImageState)
+            NodeFields(node, windowScope, bigImageState, coroutineScope)
             if (node.nodeType.isInList) {
                 Button(
                     colors = ButtonDefaults.buttonColors(Color.Red),
                     border = BorderStroke(1.dp, Color.Black),
-                    onClick = { node.inputConnectors.forEach { it.Remove() }; nodeContainer.remove(node) },
+                    onClick = { node.inputConnectors.forEach { it.Remove() }; nodeContainer.remove(node);node.destroy() },
                     modifier = Modifier.defaultMinSize(0.dp, 15.dp).fillMaxWidth(),
                     contentPadding = PaddingValues(0.dp)
                 ) {
@@ -206,7 +208,7 @@ fun Node(
             }
         }
         connectorRedrawTrigger.let {
-            if (node.nodeType.id != 6) {
+            if (node.nodeType.id != 5) {
                 Column(modifier = Modifier.offset(10.dp, 0.dp)) {
                     NodeConnector(
                         node.outputConnector,
@@ -214,7 +216,7 @@ fun Node(
                         nodeContainer,
                         redrawTrigger,
                         NodeTypeStore.getNode(node.nodeType.outputNode),
-                        coroutineScope
+                        null
                     )
                 }
             }
@@ -238,10 +240,11 @@ fun NodeConnector(
     nodeContainer: SnapshotStateList<NodeObject>,
     canvasRedrawTrigger: MutableState<Boolean>,
     transferNodeType: NodeType,
-    coroutineScope: CoroutineScope
+    label: String?,
 ) {
     var connectionRedrawTrigger by remember { mutableStateOf(false) }
     connectionRedrawTrigger.let {
+        Text(text = label ?: "Вывод")
         Box(
             modifier = Modifier.clip(shape = CircleShape)
                 .background(color = if (nodeConnector.nodeConnection == null) Color.Green else Color.Red).size(25.dp)
@@ -259,7 +262,7 @@ fun NodeConnector(
                         nodeConnector.Remove()
                         nodeConnector.nodeConnection = unconnectedConnection
                         connectionRedrawTrigger = !connectionRedrawTrigger
-                    }, onDrag = { change, amount ->
+                    }, onDrag = { change, _ ->
                         if (unconnectedConnection != null) {
                             var connected = false
                             unconnectedConnection!!.endConnector.offset =
@@ -279,7 +282,7 @@ fun NodeConnector(
                                     }
                                 }
                             } else {
-                                for (curNode in nodeContainer) {
+                                outer@ for (curNode in nodeContainer) {
                                     if (curNode == node) continue
                                     for (con in curNode.inputConnectors) {
                                         if (con.transferNodeType != transferNodeType) continue
@@ -290,15 +293,13 @@ fun NodeConnector(
                                             con.nodeConnection = unconnectedConnection
                                             unconnectedConnection = null
                                             connected = true
-                                            break
+                                            break@outer
                                         }
                                     }
                                 }
                             }
                             if (connected) {
-                                coroutineScope.launch(Dispatchers.Default) {
-                                    node.invalidateInput(true)
-                                }
+                                node.invalidateInput(true)
                             }
                         }
                         NeedRedraw(canvasRedrawTrigger)
@@ -323,7 +324,12 @@ fun NeedRedraw(vararg redrawTrigger: MutableState<Boolean>) {
 }
 
 @Composable
-fun NodeFields(node: NodeObject, windowScope: FrameWindowScope, bigImageHandler: MutableState<ImageBitmap?>) {
+fun NodeFields(
+    node: NodeObject,
+    windowScope: FrameWindowScope,
+    bigImageHandler: MutableState<ImageBitmap?>,
+    coroutineScope: CoroutineScope
+) {
     for (i in node.content.indices) {
         val fieldValue = node.content[i]
         Spacer(modifier = Modifier.height(10.dp))
@@ -338,21 +344,16 @@ fun NodeFields(node: NodeObject, windowScope: FrameWindowScope, bigImageHandler:
                 modifier = Modifier.padding(5.dp),
                 value = text,
                 onValueChange = {
+                    val temp = node.content[i]
                     if (fieldValue is Int) {
-                        if (it.text.toIntOrNull() == null && it.text.isNotEmpty()) {
-                            return@OutlinedTextField
-                        }
+                        node.content[i] = it.text.toIntOrNull() ?: node.content[i]
                     } else if (fieldValue is Float) {
-                        if (it.text.toFloatOrNull() == null && it.text.isNotEmpty()) {
-                            return@OutlinedTextField
-                        }
-                    }
-                    if (it.text.isEmpty()) {
-                        node.content[i] = null
+                        node.content[i] = it.text.toFloatOrNull() ?: node.content[i]
+                    } else {
+                        node.content[i] = it.text
                     }
                     text = it
-                    node.content[i] = it.text
-                    node.invalidateInput()
+                    if (temp != node.content[i]) node.invalidateInput()
                 },
                 label = { Text("Значение") })
         } else {
@@ -364,15 +365,22 @@ fun NodeFields(node: NodeObject, windowScope: FrameWindowScope, bigImageHandler:
                     if (windowOpened!!) "Выберите файл для открытия" else "Выберите файл для сохранения",
                     windowOpened!!
                 ) {
-                    windowOpened = null
-                    if (it != null) {
-                        try {
-                            val img = ImageIO.read(it.toFile())
-                            node.content[i] = img.toComposeImageBitmap()
-                            node.invalidateInput()
-                        } catch (_: IOException) {
+                    val windowTypeCache = windowOpened
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (it != null) {
+                            try {
+                                if (windowTypeCache!!) {
+                                    val img = ImageIO.read(it.toFile())
+                                    node.content[i] = img.toComposeImageBitmap()
+                                } else {
+                                    ImageIO.write((node.output as ImageBitmap).toAwtImage(), "png", it.toFile())
+                                }
+                                node.invalidateInput()
+                            } catch (_: IOException) {
+                            }
                         }
                     }
+                    windowOpened = null
                 }
             }
             if (isHovered) bigImageHandler.value = node.output as ImageBitmap?
@@ -386,9 +394,9 @@ fun NodeFields(node: NodeObject, windowScope: FrameWindowScope, bigImageHandler:
                     )
                 )
             }
-            if (node.nodeType.canOpenImages == true) {
+            if (node.nodeType.miscAttribute == ImageView.Openable) {
                 Button({ windowOpened = true }) { Text("Open") }
-            } else if (node.nodeType.canOpenImages == false) {
+            } else if (node.nodeType.miscAttribute == ImageView.Saveable) {
                 Button({ windowOpened = false }) { Text("Save") }
             }
         }
@@ -420,6 +428,9 @@ fun FrameWindowScope.FileDialog(
     dispose = FileDialog::dispose
 )
 
-fun main() = singleWindowApplication {
-    App(this)
+fun main() {
+    nu.pattern.OpenCV.loadLocally()
+    singleWindowApplication {
+        App(this)
+    }
 }
