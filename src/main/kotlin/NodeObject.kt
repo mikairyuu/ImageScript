@@ -1,3 +1,4 @@
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.*
 import java.awt.Dimension
@@ -31,7 +32,7 @@ class NodeObject(
     var inputConnectors: List<NodeConnector>
     var isError = false
     private val coroutineScope = CoroutineScope(Dispatchers.Default)
-    private var job : Job? = null
+    private var job: Job? = null
 
     init {
         val inputConnectorsList = mutableListOf<NodeConnector>()
@@ -56,7 +57,7 @@ class NodeObject(
                 val pastOutput = output
                 output = nodeType.outputFun(content, getInputList())
                 if (pastOutput != output || forceTraverse)
-                    outputConnector.nodeConnection?.endNodeObject?.invalidateInput()
+                    outputConnector.nodeConnection?.endNodeObject?.invalidateInput(false)
                 isError = false
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -66,7 +67,7 @@ class NodeObject(
         }
     }
 
-    fun getInputList(): List<Any?> {
+    private fun getInputList(): List<Any?> {
         val r = mutableListOf<Any?>()
         inputConnectors.forEach {
             val curOutput = it.nodeConnection?.startNodeObject?.output

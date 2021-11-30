@@ -42,6 +42,7 @@ import java.awt.FileDialog
 import java.io.File
 import java.io.IOException
 import javax.imageio.ImageIO
+import kotlin.coroutines.coroutineContext
 
 var unconnectedConnection: NodeConnection? = null
 
@@ -79,12 +80,12 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
                 frameWindowScope.window.size.width / 7,
                 frameWindowScope.window.size.height / 2
             ), NodeObject(
-                NodeTypeStore.getNode(5), frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 7),
+                NodeTypeStore.getNode(5), frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 4),
                 frameWindowScope.window.size.height / 2
             )
         )
-    //val connectionContainer = mutableListOf<Conne>()
     val redrawTrigger = remember { mutableStateOf(false) }
+    val nodeRedrawTrigger = remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     Canvas(
         modifier = Modifier.fillMaxSize()
@@ -97,13 +98,15 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
         }
     }
     Row {
-        NodeViewLayout(frameWindowScope.window.size, modifier = Modifier.weight(0.9f, true)) {
-            nodeContainer.forEach {
-                Node(nodeContainer, it, redrawTrigger, frameWindowScope, coroutineScope)
+        NodeViewLayout(frameWindowScope.window.size, modifier = Modifier.weight(1f, true)) {
+            nodeRedrawTrigger.value.let {
+                nodeContainer.forEach {
+                    Node(nodeContainer, it, redrawTrigger, nodeRedrawTrigger, frameWindowScope, coroutineScope)
+                }
             }
         }
         Box(modifier = Modifier.width(5.dp).fillMaxHeight().background(Color.Black))
-        Box(modifier = Modifier.padding(5.dp).weight(0.1f)) {
+        Box(modifier = Modifier.padding(5.dp).weight(0.2f)) {
             NodeSelector(frameWindowScope, nodeContainer)
         }
     }
@@ -147,6 +150,7 @@ fun Node(
     nodeContainer: SnapshotStateList<NodeObject>,
     node: NodeObject,
     redrawTrigger: MutableState<Boolean>,
+    nodeRedrawTrigger: MutableState<Boolean>,
     windowScope: FrameWindowScope,
     coroutineScope: CoroutineScope,
 ) {
@@ -172,6 +176,7 @@ fun Node(
                         node,
                         nodeContainer,
                         redrawTrigger,
+                        nodeRedrawTrigger,
                         NodeTypeStore.getNode(node.nodeType.inputNodeList[i]),
                         node.nodeType.inputNameList[i]
                     )
@@ -194,7 +199,7 @@ fun Node(
         ) {
             Text(node.nodeType.name, textAlign = TextAlign.Center)
             Box(modifier = Modifier.height(2.dp).fillMaxWidth().background(Color.Black))
-            NodeFields(node, windowScope, bigImageState, coroutineScope)
+            NodeFields(node, windowScope, bigImageState, coroutineScope, nodeRedrawTrigger)
             if (node.nodeType.isInList) {
                 Button(
                     colors = ButtonDefaults.buttonColors(Color.Red),
@@ -215,6 +220,7 @@ fun Node(
                         node,
                         nodeContainer,
                         redrawTrigger,
+                        nodeRedrawTrigger,
                         NodeTypeStore.getNode(node.nodeType.outputNode),
                         null
                     )
@@ -239,6 +245,7 @@ fun NodeConnector(
     node: NodeObject,
     nodeContainer: SnapshotStateList<NodeObject>,
     canvasRedrawTrigger: MutableState<Boolean>,
+    nodeRedrawTrigger: MutableState<Boolean>,
     transferNodeType: NodeType,
     label: String?,
 ) {
@@ -300,6 +307,7 @@ fun NodeConnector(
                             }
                             if (connected) {
                                 node.invalidateInput(true)
+                                NeedRedraw(nodeRedrawTrigger)
                             }
                         }
                         NeedRedraw(canvasRedrawTrigger)
@@ -328,7 +336,8 @@ fun NodeFields(
     node: NodeObject,
     windowScope: FrameWindowScope,
     bigImageHandler: MutableState<ImageBitmap?>,
-    coroutineScope: CoroutineScope
+    coroutineScope: CoroutineScope,
+    nodeRedrawTrigger: MutableState<Boolean>
 ) {
     for (i in node.content.indices) {
         val fieldValue = node.content[i]
@@ -375,7 +384,8 @@ fun NodeFields(
                                 } else {
                                     ImageIO.write((node.output as ImageBitmap).toAwtImage(), "png", it.toFile())
                                 }
-                                node.invalidateInput()
+                                node.invalidateInput(false)
+                                NeedRedraw(nodeRedrawTrigger)
                             } catch (_: IOException) {
                             }
                         }
