@@ -1,11 +1,13 @@
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asDesktopBitmap
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import org.bytedeco.javacv.Java2DFrameUtils
 import org.bytedeco.javacv.OpenCVFrameConverter
-import org.opencv.core.Point
-import org.opencv.core.Scalar
+import org.jetbrains.skiko.toBitmap
+import org.jetbrains.skiko.toImage
+import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
+import java.awt.Color
 
 
 enum class ImageView {
@@ -87,8 +89,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val src =
-                        conv.convertToOrgOpenCvCoreMat(conv.convert(Java2DFrameUtils.toMat((inputList[0] as ImageBitmap).toAwtImage())))
+                    val src = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     Imgproc.putText(
                         src,
                         inputList[3] as String,
@@ -98,7 +99,7 @@ object NodeTypeStore {
                         Scalar(255.0, 255.0, 255.0),
                         5
                     )
-                    Java2DFrameUtils.toBufferedImage(conv.convert(src)).toComposeImageBitmap()
+                    toComposeImage(src, conv)
                 }
             override val miscAttribute: Any = ImageView.Viewable
         },
@@ -130,7 +131,12 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
+                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGB2GRAY)
+                    toComposeImage(mat, conv)
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -141,7 +147,10 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img", "bright")
             override val outputNode = 3
             override val outputFun: (List<Any?>, List<Any?>) -> Any? =
-                { contentList: List<Any?>, inputList: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val img = (inputList[0] as ImageBitmap).toAwtImage()
+                    Utils.newBrightness(img, inputList[1] as Float).toComposeImageBitmap()
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -152,7 +161,9 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img")
             override val outputNode = 3
             override val outputFun: (List<Any?>, List<Any?>) -> Any? =
-                { contentList: List<Any?>, inputList: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    Utils.toSepia((inputList[0] as ImageBitmap).toAwtImage()).toComposeImageBitmap()
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -163,7 +174,9 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    Utils.invertImage((inputList[0] as ImageBitmap).toAwtImage()).toComposeImageBitmap()
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -174,7 +187,14 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img", "kernelSize")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
+                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    var size = (inputList[1] as Int).toDouble()
+                    if ((size % 2) == 0.0) size += 1
+                    Imgproc.GaussianBlur(mat, mat, Size(size, size), 0.0)
+                    toComposeImage(mat, conv)
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -185,7 +205,23 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img", "x", "y")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
+                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val transMat = Mat(2, 3, CvType.CV_64FC1)
+                    transMat.put(
+                        0,
+                        0,
+                        1.0,
+                        0.0,
+                        (inputList[1] as Float).toDouble(),
+                        0.0,
+                        1.0,
+                        (inputList[2] as Float).toDouble()
+                    )
+                    Imgproc.warpAffine(mat, mat, transMat, mat.size());
+                    toComposeImage(mat, conv)
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -196,7 +232,14 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img", "x", "y")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
+                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    Imgproc.resize(
+                        mat, mat, Size((inputList[1] as Float).toDouble(), (inputList[2] as Float).toDouble())
+                    )
+                    toComposeImage(mat, conv)
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
         object : NodeType() {
@@ -207,7 +250,17 @@ object NodeTypeStore {
             override val inputNameList: List<String> = listOf("img", "rad")
             override val outputNode = 3
             override val outputFun =
-                { contentList: List<Any?>, _: List<Any?> -> }
+                { _: List<Any?>, inputList: List<Any?> ->
+                    val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
+                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val rotMat = Imgproc.getRotationMatrix2D(
+                        Point(mat.cols() / 2.0, mat.rows() / 2.0),
+                        Math.toDegrees((inputList[1] as Float).toDouble()),
+                        1.0
+                    )
+                    Imgproc.warpAffine(mat, mat, rotMat, mat.size());
+                    toComposeImage(mat, conv)
+                }
             override val miscAttribute: Any = ImageView.Viewable
         },
     )
