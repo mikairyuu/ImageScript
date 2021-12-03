@@ -3,9 +3,11 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.bytedeco.javacv.Java2DFrameUtils
 import org.bytedeco.javacv.OpenCVFrameConverter
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import java.awt.Color
 import java.awt.image.BufferedImage
+import java.awt.image.DataBufferByte
 
 
 object Utils {
@@ -104,11 +106,15 @@ object Utils {
 }
 
 
-fun toComposeImage(mat: Mat, converter: OpenCVFrameConverter.ToOrgOpenCvCoreMat): ImageBitmap {
-    return Java2DFrameUtils.toBufferedImage(converter.convert(mat)).toComposeImageBitmap()
+fun toComposeImage(m: Mat, converter: OpenCVFrameConverter.ToOrgOpenCvCoreMat): ImageBitmap {
+    return Java2DFrameUtils.toBufferedImage(converter.convert(m)).toComposeImageBitmap()
 }
 
 
-fun OpenCVFrameConverter.ToOrgOpenCvCoreMat.convertToOrgOpenCvCoreMat(img: ImageBitmap): Mat? {
-    return convertToOrgOpenCvCoreMat(convert(Java2DFrameUtils.toMat((img).toAwtImage())))
+fun convertToOrgOpenCvCoreMat(img: ImageBitmap): Mat {
+    val awt = BufferedImage(img.width, img.height, BufferedImage.TYPE_3BYTE_BGR)
+    awt.graphics.drawImage(img.toAwtImage(), 0, 0, null)
+    val res = Mat(img.height, img.width, CvType.CV_8UC3)
+    res.put(0, 0, (awt.raster.dataBuffer as DataBufferByte).data)
+    return res
 }

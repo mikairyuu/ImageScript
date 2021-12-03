@@ -1,13 +1,9 @@
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asDesktopBitmap
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.bytedeco.javacv.OpenCVFrameConverter
-import org.jetbrains.skiko.toBitmap
-import org.jetbrains.skiko.toImage
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
-import java.awt.Color
 
 
 enum class ImageView {
@@ -89,7 +85,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val src = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val src = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     Imgproc.putText(
                         src,
                         inputList[3] as String,
@@ -133,7 +129,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val mat = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGB2GRAY)
                     toComposeImage(mat, conv)
                 }
@@ -189,7 +185,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val mat = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     var size = (inputList[1] as Int).toDouble()
                     if ((size % 2) == 0.0) size += 1
                     Imgproc.GaussianBlur(mat, mat, Size(size, size), 0.0)
@@ -207,7 +203,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val mat = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     val transMat = Mat(2, 3, CvType.CV_64FC1)
                     transMat.put(
                         0,
@@ -234,7 +230,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val mat = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     Imgproc.resize(
                         mat, mat, Size((inputList[1] as Float).toDouble(), (inputList[2] as Float).toDouble())
                     )
@@ -252,7 +248,7 @@ object NodeTypeStore {
             override val outputFun =
                 { _: List<Any?>, inputList: List<Any?> ->
                     val conv = OpenCVFrameConverter.ToOrgOpenCvCoreMat()
-                    val mat = conv.convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
+                    val mat = convertToOrgOpenCvCoreMat(inputList[0] as ImageBitmap)!!
                     val rotMat = Imgproc.getRotationMatrix2D(
                         Point(mat.cols() / 2.0, mat.rows() / 2.0),
                         Math.toDegrees((inputList[1] as Float).toDouble()),
