@@ -110,6 +110,5 @@ fun NodeConnector.Remove() {
 }
 
 fun Offset.isInBounds(nodeConnector: NodeConnector): Boolean {
-    val res = (nodeConnector.offset.getDistanceSquared() - this.getDistanceSquared()).absoluteValue
-    return res < 5000
+    return ((nodeConnector.offset.x - this.x).absoluteValue + (nodeConnector.offset.y - this.y).absoluteValue) < 20
 }

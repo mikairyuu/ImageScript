@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.consumeAllChanges
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.*
@@ -43,7 +42,6 @@ import java.awt.FileDialog
 import java.io.File
 import java.io.IOException
 import javax.imageio.ImageIO
-import kotlin.coroutines.coroutineContext
 
 var unconnectedConnection: NodeConnection? = null
 
