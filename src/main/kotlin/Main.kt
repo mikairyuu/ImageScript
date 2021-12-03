@@ -75,16 +75,16 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
     val nodeContainer =
         mutableStateListOf<NodeObject>(
             NodeObject(
-                NodeTypeStore.getNode(4),
+                NodeTypeStore.getNodeType(4),
                 frameWindowScope.window.size.width / 7,
                 frameWindowScope.window.size.height / 2
             ), NodeObject(
-                NodeTypeStore.getNode(5), frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 4),
+                NodeTypeStore.getNodeType(5),
+                frameWindowScope.window.size.width - (frameWindowScope.window.size.width / 4),
                 frameWindowScope.window.size.height / 2
             )
         )
     val redrawTrigger = remember { mutableStateOf(false) }
-    val nodeRedrawTrigger = remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     Canvas(
         modifier = Modifier.fillMaxSize()
@@ -98,10 +98,9 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
     }
     Row {
         NodeViewLayout(frameWindowScope.window.size, modifier = Modifier.weight(1f, true)) {
-            nodeRedrawTrigger.value.let {
-                nodeContainer.forEach {
-                    Node(nodeContainer, it, redrawTrigger, nodeRedrawTrigger, frameWindowScope, coroutineScope)
-                }
+            nodeContainer.forEach {
+                if (it.Xpos != -10)
+                    Node(nodeContainer, it, redrawTrigger, nodeContainer, frameWindowScope, coroutineScope)
             }
         }
         Box(modifier = Modifier.width(5.dp).fillMaxHeight().background(Color.Black))
@@ -149,7 +148,7 @@ fun Node(
     nodeContainer: SnapshotStateList<NodeObject>,
     node: NodeObject,
     redrawTrigger: MutableState<Boolean>,
-    nodeRedrawTrigger: MutableState<Boolean>,
+    nodeRedrawTrigger: SnapshotStateList<NodeObject>,
     windowScope: FrameWindowScope,
     coroutineScope: CoroutineScope,
 ) {
@@ -157,7 +156,6 @@ fun Node(
     var x by remember { mutableStateOf(node.Xpos) }
     var y by remember { mutableStateOf(node.Ypos) }
     val bigImageState = remember { mutableStateOf<ImageBitmap?>(null) }
-    val connectorRedrawTrigger = remember { mutableStateOf(false) }
     if (internalNode != node) { // если элемент стэка вызовов компоуза устарел, заменяем его новым
         internalNode = node
         x = internalNode.Xpos
@@ -167,19 +165,17 @@ fun Node(
         modifier = Modifier.layoutId(IntOffset(x, y)),
         verticalAlignment = Alignment.CenterVertically
     ) { //Row из трёх колонок - входящих связей, ноды, и исходящих связей
-        connectorRedrawTrigger.let {
-            Column(modifier = Modifier.offset((-10).dp, 0.dp)) {
-                for (i in node.inputConnectors.indices) {
-                    NodeConnector(
-                        node.inputConnectors[i],
-                        node,
-                        nodeContainer,
-                        redrawTrigger,
-                        nodeRedrawTrigger,
-                        NodeTypeStore.getNode(node.nodeType.inputNodeList[i]),
-                        node.nodeType.inputNameList[i]
-                    )
-                }
+        Column(modifier = Modifier.offset((-10).dp, 0.dp)) {
+            for (i in node.inputConnectors.indices) {
+                NodeConnector(
+                    node.inputConnectors[i],
+                    node,
+                    nodeContainer,
+                    redrawTrigger,
+                    nodeRedrawTrigger,
+                    NodeTypeStore.getNodeType(node.nodeType.inputNodeList[i]),
+                    node.nodeType.inputNameList[i]
+                )
             }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally,
@@ -211,19 +207,17 @@ fun Node(
                 }
             }
         }
-        connectorRedrawTrigger.let {
-            if (node.nodeType.id != 5) {
-                Column(modifier = Modifier.offset(10.dp, 0.dp)) {
-                    NodeConnector(
-                        node.outputConnector,
-                        node,
-                        nodeContainer,
-                        redrawTrigger,
-                        nodeRedrawTrigger,
-                        NodeTypeStore.getNode(node.nodeType.outputNode),
-                        null
-                    )
-                }
+        if (node.nodeType.id != 5) {
+            Column(modifier = Modifier.offset(10.dp, 0.dp)) {
+                NodeConnector(
+                    node.outputConnector,
+                    node,
+                    nodeContainer,
+                    redrawTrigger,
+                    nodeRedrawTrigger,
+                    NodeTypeStore.getNodeType(node.nodeType.outputNode),
+                    null
+                )
             }
         }
     }
@@ -244,7 +238,7 @@ fun NodeConnector(
     node: NodeObject,
     nodeContainer: SnapshotStateList<NodeObject>,
     canvasRedrawTrigger: MutableState<Boolean>,
-    nodeRedrawTrigger: MutableState<Boolean>,
+    nodeRedrawTrigger: SnapshotStateList<NodeObject>,
     transferNodeType: NodeType,
     label: String?,
 ) {
@@ -267,7 +261,7 @@ fun NodeConnector(
                         )
                         nodeConnector.Remove()
                         nodeConnector.nodeConnection = unconnectedConnection
-                        connectionRedrawTrigger = !connectionRedrawTrigger
+                        NeedRedraw(nodeRedrawTrigger)
                     }, onDrag = { change, _ ->
                         if (unconnectedConnection != null) {
                             var connected = false
@@ -304,10 +298,7 @@ fun NodeConnector(
                                     }
                                 }
                             }
-                            if (connected) {
-                                node.invalidateInput(true)
-                                NeedRedraw(nodeRedrawTrigger)
-                            }
+                            if (connected) node.invalidateInput(true, { NeedRedraw(nodeRedrawTrigger) })
                         }
                         NeedRedraw(canvasRedrawTrigger)
                     }, onDragEnd = {
@@ -321,13 +312,6 @@ fun NodeConnector(
                 })
         Text(text = transferNodeType.name)
     }
-
-}
-
-fun NeedRedraw(vararg redrawTrigger: MutableState<Boolean>) {
-    redrawTrigger.forEach {
-        it.value = !it.value
-    }
 }
 
 @Composable
@@ -336,7 +320,7 @@ fun NodeFields(
     windowScope: FrameWindowScope,
     bigImageHandler: MutableState<ImageBitmap?>,
     coroutineScope: CoroutineScope,
-    nodeRedrawTrigger: MutableState<Boolean>
+    nodeRedrawTrigger: SnapshotStateList<NodeObject>
 ) {
     for (i in node.content.indices) {
         val fieldValue = node.content[i]
@@ -361,7 +345,7 @@ fun NodeFields(
                         node.content[i] = it.text
                     }
                     text = it
-                    if (temp != node.content[i]) node.invalidateInput()
+                    if (temp != node.content[i]) node.invalidateInput(nodeRedrawTrigger = { })
                 },
                 label = { Text("Значение") })
         } else {
@@ -383,7 +367,7 @@ fun NodeFields(
                                 } else {
                                     ImageIO.write((node.output as ImageBitmap).toAwtImage(), "png", it.toFile())
                                 }
-                                node.invalidateInput(false)
+                                node.invalidateInput(false, { NeedRedraw(nodeRedrawTrigger) })
                                 NeedRedraw(nodeRedrawTrigger)
                             } catch (_: IOException) {
                             }
@@ -436,6 +420,17 @@ fun FrameWindowScope.FileDialog(
     },
     dispose = FileDialog::dispose
 )
+
+fun NeedRedraw(vararg redrawTrigger: MutableState<Boolean>) {
+    redrawTrigger.forEach {
+        it.value = !it.value
+    }
+}
+
+fun NeedRedraw(nodeRedrawTrigger: SnapshotStateList<NodeObject>) {
+    nodeRedrawTrigger.add(NodeObject(NodeTypeStore.getNodeType(0), -10, 0))
+    nodeRedrawTrigger.removeAt(nodeRedrawTrigger.size - 1)
+}
 
 fun main() {
     nu.pattern.OpenCV.loadLocally()

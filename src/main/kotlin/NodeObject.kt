@@ -1,4 +1,3 @@
-import androidx.compose.runtime.MutableState
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.*
 import java.awt.Dimension
@@ -28,7 +27,7 @@ class NodeObject(
     var input: MutableList<Int> = nodeType.inputNodeList.toMutableList()
     var output: Any? = null
     var outputConnector: NodeConnector =
-        NodeConnector(Offset(0f, 0f), null, false, NodeTypeStore.getNode(nodeType.outputNode))
+        NodeConnector(Offset(0f, 0f), null, false, NodeTypeStore.getNodeType(nodeType.outputNode))
     var inputConnectors: List<NodeConnector>
     var isError = false
     private val coroutineScope = CoroutineScope(Dispatchers.Default)
@@ -42,7 +41,7 @@ class NodeObject(
                     Offset(0f, 0f),
                     null,
                     true,
-                    NodeTypeStore.getNode(nodeType.inputNodeList[i])
+                    NodeTypeStore.getNodeType(nodeType.inputNodeList[i])
                 )
             )
         }
@@ -50,17 +49,20 @@ class NodeObject(
         invalidateInput()
     }
 
-    fun invalidateInput(forceTraverse: Boolean = false) {
-        job?.cancel()
+    fun invalidateInput(forceTraverse: Boolean = false, nodeRedrawTrigger: (() -> Unit)? = null, depth: Int = 0) {
+        if (depth == 0) job?.cancel()
         job = coroutineScope.launch {
             try {
                 val pastOutput = output
                 output = nodeType.outputFun(content, getInputList())
-                if (pastOutput != output || forceTraverse)
-                    outputConnector.nodeConnection?.endNodeObject?.invalidateInput(false)
+                if ((pastOutput != output || forceTraverse) && (outputConnector.nodeConnection?.endNodeObject?.equals(null)) != null)
+                    outputConnector.nodeConnection?.endNodeObject?.invalidateInput(false, nodeRedrawTrigger, depth + 1)
+                else {
+                    nodeRedrawTrigger?.invoke()
+                }
                 isError = false
             } catch (e: Exception) {
-                e.printStackTrace()
+                nodeRedrawTrigger?.invoke()
                 output = null
                 isError = true
             }
@@ -98,14 +100,15 @@ data class NodeConnector(
 
 fun NodeConnector.Remove() {
     if (nodeConnection != null) {
+        val temp = nodeConnection!!.endNodeObject
         if (nodeConnection!!.endConnector == this) {
             nodeConnection!!.startConnector.nodeConnection = null
             nodeConnection!!.endConnector.nodeConnection = null
         } else {
             nodeConnection!!.endConnector.nodeConnection = null
-            nodeConnection!!.endNodeObject?.invalidateInput(false)
             nodeConnection!!.startConnector.nodeConnection = null
         }
+        temp?.invalidateInput(false)
     }
 }
 
