@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,7 @@ import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.singleWindowApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.awt.Dimension
 import java.awt.FileDialog
@@ -73,7 +75,7 @@ fun App(frameWindowScope: FrameWindowScope) {
 @Composable
 fun NodeViewport(frameWindowScope: FrameWindowScope) {
     val nodeContainer =
-        mutableStateListOf<NodeObject>(
+        mutableStateListOf(
             NodeObject(
                 NodeTypeStore.getNodeType(4),
                 frameWindowScope.window.size.width / 7,
@@ -86,6 +88,40 @@ fun NodeViewport(frameWindowScope: FrameWindowScope) {
         )
     val redrawTrigger = remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    frameWindowScope.MenuBar {
+        Menu(text = "Scene") {
+            var readWindowOpened by remember { mutableStateOf<Boolean?>(null) }
+            if (readWindowOpened != null) {
+                frameWindowScope.FileDialog(
+                    if (readWindowOpened!!) "Выберите сцену для открытия" else "Выберите сцену для сохранения",
+                    readWindowOpened!!
+                ) {
+                    if (readWindowOpened != null) {
+                        try {
+                            if (readWindowOpened == true) {
+                                coroutineScope.launch {
+                                    val temp = decode(it!!.toFile().readText()) { NeedRedraw(nodeContainer) }
+                                    nodeContainer.clear()
+                                    delay(25)
+                                    nodeContainer.addAll(temp)
+                                }
+                            } else {
+                                it!!.toFile().writeText(serialize(nodeContainer))
+                            }
+                        } catch (_: IOException) {
+                        }
+                    }
+                    readWindowOpened = null
+                }
+            }
+            Item(text = "Load") {
+                readWindowOpened = true
+            }
+            Item(text = "Save") {
+                readWindowOpened = false
+            }
+        }
+    }
     Canvas(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -345,7 +381,7 @@ fun NodeFields(
                         node.content[i] = it.text
                     }
                     text = it
-                    if (temp != node.content[i]) node.invalidateInput(nodeRedrawTrigger = { })
+                    if (temp != node.content[i]) node.invalidateInput()
                 },
                 label = { Text("Значение") })
         } else {
@@ -368,7 +404,6 @@ fun NodeFields(
                                     ImageIO.write((node.output as ImageBitmap).toAwtImage(), "png", it.toFile())
                                 }
                                 node.invalidateInput(false, { NeedRedraw(nodeRedrawTrigger) })
-                                NeedRedraw(nodeRedrawTrigger)
                             } catch (_: IOException) {
                             }
                         }
@@ -429,7 +464,7 @@ fun NeedRedraw(vararg redrawTrigger: MutableState<Boolean>) {
 
 fun NeedRedraw(nodeRedrawTrigger: SnapshotStateList<NodeObject>) {
     nodeRedrawTrigger.add(NodeObject(NodeTypeStore.getNodeType(0), -10, 0))
-    nodeRedrawTrigger.removeAt(nodeRedrawTrigger.size - 1)
+    nodeRedrawTrigger.removeAt(nodeRedrawTrigger.lastIndex)
 }
 
 fun main() {
